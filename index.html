@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KeepMore - My Notes</title>
+    <link rel="icon" type="image/png" href="sticky-note.png">
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Bootstrap Icons -->
@@ -50,10 +51,28 @@
             line-height: 1.6;
             color: #333;
             min-height: calc(100vh - 200px);
+            padding-bottom: 100px;
         }
 
         .editor-content:focus {
             outline: none;
+        }
+
+        /* List Styles - Fixed for Tailwind Preflight */
+        .editor-content ul {
+            list-style-type: disc !important;
+            padding-left: 1.5em !important;
+            margin: 1em 0 !important;
+        }
+
+        .editor-content ol {
+            list-style-type: decimal !important;
+            padding-left: 1.5em !important;
+            margin: 1em 0 !important;
+        }
+
+        .editor-content li {
+            display: list-item !important;
         }
 
         /* Floating Toolbar Style like My Notes */
@@ -133,12 +152,25 @@
             }
         }
 
-        /* Base64 Images */
+        /* Base64 Images & Resizing */
         .editor-content img {
             max-width: 100%;
             border-radius: 4px;
             margin: 16px 0;
-            display: block;
+            display: inline-block;
+            cursor: nwse-resize;
+            vertical-align: middle;
+            border: 2px solid transparent;
+            transition: border 0.2s;
+        }
+
+        .editor-content img:hover {
+            border: 2px solid #3b82f6;
+        }
+
+        .editor-content img.selected {
+            border: 2px solid #3b82f6;
+            outline: none;
         }
 
         /* Selection highlight */
@@ -263,9 +295,14 @@
                     <aside className="sidebar w-64 flex flex-col shrink-0">
                         <div className="p-5 flex items-center justify-between">
                             <h1 className="font-bold text-lg tracking-tight">KeepMore</h1>
-                            <button onClick={addFolder} className="text-gray-400 hover:text-black transition-colors">
-                                <i className="bi bi-folder-plus text-xl"></i>
-                            </button>
+                            <div className="flex items-center space-x-3">
+                                <button title="Google Drive Sync" className="text-gray-400 hover:text-green-600 transition-colors">
+                                    <i className="bi bi-google-play text-sm"></i>
+                                </button>
+                                <button onClick={addFolder} className="text-gray-400 hover:text-black transition-colors">
+                                    <i className="bi bi-folder-plus text-xl"></i>
+                                </button>
+                            </div>
                         </div>
 
                         <div className="flex-1 overflow-y-auto px-2">
@@ -324,15 +361,8 @@
                             ))}
                         </div>
 
-                        <div className="sidebar-footer space-y-2">
-                            <button className="flex items-center w-full px-4 py-2 text-sm text-gray-500 hover:text-black transition-colors rounded-lg hover:bg-gray-100">
-                                <i className="bi bi-shield-check mr-3"></i>
-                                <span className="text-xs font-semibold">Meritz Sync Protected</span>
-                            </button>
-                            <button className="flex items-center w-full px-4 py-2 text-sm text-gray-500 hover:text-black transition-colors rounded-lg hover:bg-gray-100">
-                                <i className="bi bi-palette mr-3"></i>
-                                <span className="text-xs">Theme Settings</span>
-                            </button>
+                        <div className="sidebar-footer">
+                            {/* Footer content removed per user request */}
                         </div>
                     </aside>
 
@@ -349,12 +379,13 @@
                                             onChange={(e) => updateNote(activeNote.id, activeNote.folderId, 'title', e.target.value)}
                                         />
                                         <Editor
+                                            editorRef={editorRef}
                                             content={activeNote.content}
                                             onUpdate={(val) => updateNote(activeNote.id, activeNote.folderId, 'content', val)}
                                         />
                                     </div>
                                 </div>
-                                <FloatingToolbar />
+                                <FloatingToolbar editorRef={editorRef} />
                             </React.Fragment>
                         ) : (
                             <div className="flex-1 flex items-center justify-center text-gray-200">
@@ -369,9 +400,12 @@
             );
         };
 
-        const FloatingToolbar = () => {
+        const FloatingToolbar = ({ editorRef }) => {
             const execCmd = (cmd, val = null) => {
-                document.execCommand(cmd, false, val);
+                if (editorRef.current) {
+                    editorRef.current.focus();
+                    document.execCommand(cmd, false, val);
+                }
             };
 
             const insertLink = () => {
@@ -413,14 +447,53 @@
             );
         };
 
-        const Editor = ({ content, onUpdate }) => {
-            const editorRef = useRef(null);
+        const Editor = ({ content, onUpdate, editorRef }) => {
+            const resizingImg = useRef(null);
+            const startX = useRef(0);
+            const startWidth = useRef(0);
 
             useEffect(() => {
                 if (editorRef.current && editorRef.current.innerHTML !== content) {
                     editorRef.current.innerHTML = content;
                 }
             }, [content]);
+
+            const handleInput = (e) => {
+                onUpdate(e.currentTarget.innerHTML);
+            };
+
+            const handleMouseDown = (e) => {
+                if (e.target.tagName === 'IMG') {
+                    // Start Resizing
+                    resizingImg.current = e.target;
+                    startX.current = e.clientX;
+                    startWidth.current = e.target.offsetWidth;
+                    e.target.classList.add('selected');
+
+                    const onMouseMove = (moveEvent) => {
+                        if (resizingImg.current) {
+                            const delta = moveEvent.clientX - startX.current;
+                            resizingImg.current.style.width = (startWidth.current + delta) + 'px';
+                        }
+                    };
+
+                    const onMouseUp = () => {
+                        resizingImg.current = null;
+                        document.removeEventListener('mousemove', onMouseMove);
+                        document.removeEventListener('mouseup', onMouseUp);
+                        handleInput({ currentTarget: editorRef.current });
+                    };
+
+                    document.addEventListener('mousemove', onMouseMove);
+                    document.addEventListener('mouseup', onMouseUp);
+
+                    e.preventDefault(); // Stop default ghost drag
+                } else {
+                    // Deselect images
+                    const imgs = editorRef.current.querySelectorAll('img');
+                    imgs.forEach(img => img.classList.remove('selected'));
+                }
+            };
 
             const handlePaste = (e) => {
                 const items = (e.clipboardData || e.originalEvent.clipboardData).items;
@@ -432,12 +505,22 @@
                         reader.onload = (event) => {
                             const img = document.createElement('img');
                             img.src = event.target.result;
+                            img.style.width = '300px'; // Default size
+
                             const selection = window.getSelection();
                             if (selection.rangeCount > 0) {
                                 const range = selection.getRangeAt(0);
                                 range.deleteContents();
                                 range.insertNode(img);
+                                // Insert a zero-width space after image to allow cursor positioning/deletion
+                                const spacer = document.createTextNode('\u200B');
+                                range.setStartAfter(img);
+                                range.insertNode(spacer);
+                                range.setStartAfter(spacer);
+                                selection.removeAllRanges();
+                                selection.addRange(range);
                             }
+                            handleInput({ currentTarget: editorRef.current });
                         };
                         reader.readAsDataURL(blob);
                         e.preventDefault();
@@ -445,12 +528,23 @@
                 }
             };
 
+            const handleKeyDown = (e) => {
+                const selectedImg = editorRef.current.querySelector('img.selected');
+                if (selectedImg && (e.key === 'Backspace' || e.key === 'Delete')) {
+                    selectedImg.remove();
+                    handleInput({ currentTarget: editorRef.current });
+                    e.preventDefault();
+                }
+            };
+
             return (
                 <div
                     ref={editorRef}
                     contentEditable
-                    onInput={(e) => onUpdate(e.currentTarget.innerHTML)}
+                    onInput={handleInput}
                     onPaste={handlePaste}
+                    onMouseDown={handleMouseDown}
+                    onKeyDown={handleKeyDown}
                     className="editor-content"
                     placeholder="Write something brilliant..."
                 ></div>
