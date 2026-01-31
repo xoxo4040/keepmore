@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,182 +12,356 @@
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; }
-        .editor-content:focus { outline: none; }
-        .sidebar-item:hover .action-btn { opacity: 1; }
-        .action-btn { opacity: 0; transition: opacity 0.2s; }
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 10px; }
-        .folder-transition { transition: all 0.2s ease-in-out; }
-        .editor-content img { max-width: 100%; border-radius: 8px; margin: 10px 0; }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #ffffff;
+            color: #1a1a1a;
+        }
+
+        .sidebar {
+            background-color: #f7f7f7;
+            border-right: 1px solid #ededed;
+            transition: width 0.3s ease;
+        }
+
+        .sidebar-item {
+            border-radius: 6px;
+            margin: 2px 8px;
+            transition: all 0.2s;
+        }
+
+        .sidebar-item:hover {
+            background-color: #efefef;
+        }
+
+        .sidebar-item.active {
+            background-color: #e8e8e8;
+            font-weight: 600;
+        }
+
+        .editor-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        .editor-content {
+            font-size: 18px;
+            line-height: 1.6;
+            color: #333;
+            min-height: calc(100vh - 200px);
+        }
+
+        .editor-content:focus {
+            outline: none;
+        }
+
+        /* Floating Toolbar Style like My Notes */
+        .toolbar-wrapper {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            padding: 6px 12px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08), 0 0 1px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            z-index: 1000;
+            opacity: 0.3;
+            transition: opacity 0.3s, transform 0.3s;
+        }
+
+        .toolbar-wrapper:hover {
+            opacity: 1;
+            transform: translateX(-50%) translateY(-5px);
+        }
+
+        .toolbar-btn {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            color: #555;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .toolbar-btn:hover {
+            background-color: #f0f0f0;
+            color: #000;
+        }
+
+        .toolbar-divider {
+            width: 1px;
+            height: 18px;
+            background-color: #eee;
+            margin: 0 8px;
+        }
+
+        .note-title-input {
+            font-size: 32px;
+            font-weight: 700;
+            border: none;
+            outline: none;
+            width: 100%;
+            margin-bottom: 20px;
+            color: #111;
+            letter-spacing: -0.02em;
+        }
+
+        .note-title-input::placeholder {
+            color: #eee;
+        }
+
+        /* Settings/Actions in sidebar bottom */
+        .sidebar-footer {
+            border-top: 1px solid #ededed;
+            padding: 12px;
+        }
+
+        /* Responsive hiding of sidebar */
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 0;
+                overflow: hidden;
+            }
+        }
+
+        /* Base64 Images */
+        .editor-content img {
+            max-width: 100%;
+            border-radius: 4px;
+            margin: 16px 0;
+            display: block;
+        }
+
+        /* Selection highlight */
+        ::selection {
+            background: #e3f2fd;
+        }
+
+        /* Placeholders for contenteditable */
         [contenteditable]:empty:before {
             content: attr(placeholder);
-            color: #d1d5db;
-            cursor: text;
+            color: #ccc;
+            pointer-events: none;
+            display: block;
         }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-800">
+
+<body>
     <div id="root"></div>
 
-    <!-- React & Babel CDNs -->
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
+        const { useState, useEffect, useRef, useCallback, useMemo } = React;
 
         const App = () => {
-            const [folders, setFolders] = useState(() => {
-                const saved = localStorage.getItem('keepmore-data');
-                return saved ? JSON.parse(saved) : [
-                    { id: 'f1', name: '내 메모', isOpen: true, notes: [{ id: 'n1', title: '첫 번째 메모', content: '여기에 내용을 입력하세요.' }] }
-                ];
+            const [data, setData] = useState(() => {
+                const saved = localStorage.getItem('keepmore-v2');
+                return saved ? JSON.parse(saved) : {
+                    folders: [
+                        {
+                            id: 'f1', name: 'Notes', isOpen: true, notes: [
+                                { id: 'n1', title: 'Welcome', content: '<div>Start writing here...</div>' }
+                            ]
+                        }
+                    ],
+                    activeNoteId: 'n1'
+                };
             });
 
-            const [selectedFolderId, setSelectedFolderId] = useState(folders[0]?.id || null);
-            const [selectedNoteId, setSelectedNoteId] = useState(folders[0]?.notes[0]?.id || null);
+            const [editingId, setEditingId] = useState(null);
+            const editorRef = useRef(null);
 
-            // 실시간 로컬스토리지 저장
+            // Sync to LocalStorage
             useEffect(() => {
-                localStorage.setItem('keepmore-data', JSON.stringify(folders));
-            }, [folders]);
+                localStorage.setItem('keepmore-v2', JSON.stringify(data));
+            }, [data]);
 
-            const currentFolder = folders.find(f => f.id === selectedFolderId);
-            const currentNote = currentFolder?.notes.find(n => n.id === selectedNoteId);
+            const activeNote = useMemo(() => {
+                for (const folder of data.folders) {
+                    const note = folder.notes.find(n => n.id === data.activeNoteId);
+                    if (note) return { ...note, folderId: folder.id };
+                }
+                return null;
+            }, [data.folders, data.activeNoteId]);
 
-            const handleUpdateNote = (id, field, value) => {
-                setFolders(prev => prev.map(folder => ({
-                    ...folder,
-                    notes: folder.notes.map(note => note.id === id ? { ...note, [field]: value } : note)
-                })));
-            };
-
-            const toggleFolder = (folderId) => {
-                setFolders(prev => prev.map(f => f.id === folderId ? { ...f, isOpen: !f.isOpen } : f));
-            };
-
-            const addFolder = () => {
-                const newFolder = { id: Date.now().toString(), name: '새 폴더', isOpen: true, notes: [] };
-                setFolders([...folders, newFolder]);
-                setSelectedFolderId(newFolder.id);
+            const updateNote = (noteId, folderId, field, value) => {
+                setData(prev => ({
+                    ...prev,
+                    folders: prev.folders.map(f => f.id === folderId ? {
+                        ...f,
+                        notes: f.notes.map(n => n.id === noteId ? { ...n, [field]: value } : n)
+                    } : f)
+                }));
             };
 
             const addNote = (folderId) => {
-                const newNote = { id: 'n' + Date.now(), title: '제목 없는 메모', content: '' };
-                setFolders(prev => prev.map(f => 
-                    f.id === folderId ? { ...f, isOpen: true, notes: [newNote, ...f.notes] } : f
-                ));
-                setSelectedFolderId(folderId);
-                setSelectedNoteId(newNote.id);
+                const newId = 'n' + Date.now();
+                const newNote = { id: newId, title: '', content: '<div></div>' };
+                setData(prev => ({
+                    ...prev,
+                    folders: prev.folders.map(f => f.id === folderId ? {
+                        ...f, isOpen: true, notes: [newNote, ...f.notes]
+                    } : f),
+                    activeNoteId: newId
+                }));
+                setEditingId(newId);
             };
 
-            const deleteFolder = (e, folderId) => {
+            const addFolder = () => {
+                const newId = 'f' + Date.now();
+                const newFolder = { id: newId, name: 'New Folder', isOpen: true, notes: [] };
+                setData(prev => ({ ...prev, folders: [...prev.folders, newFolder] }));
+                setEditingId(newId);
+            };
+
+            const deleteNote = (e, noteId, folderId) => {
                 e.stopPropagation();
-                if (confirm('폴더를 삭제하시겠습니까?')) {
-                    setFolders(prev => prev.filter(f => f.id !== folderId));
-                    if (selectedFolderId === folderId) {
-                        setSelectedFolderId(null);
-                        setSelectedNoteId(null);
+                if (!confirm('Delete this note?')) return;
+                setData(prev => {
+                    const nextFolders = prev.folders.map(f => f.id === folderId ? {
+                        ...f, notes: f.notes.filter(n => n.id !== noteId)
+                    } : f);
+                    let nextActive = prev.activeNoteId;
+                    if (nextActive === noteId) {
+                        const allNotes = nextFolders.flatMap(f => f.notes);
+                        nextActive = allNotes.length > 0 ? allNotes[0].id : null;
                     }
-                }
+                    return { ...prev, folders: nextFolders, activeNoteId: nextActive };
+                });
             };
 
-            const deleteNote = (e, folderId, noteId) => {
-                e.stopPropagation();
-                if (confirm('메모를 삭제하시겠습니까?')) {
-                    setFolders(prev => prev.map(f => 
-                        f.id === folderId ? { ...f, notes: f.notes.filter(n => n.id !== noteId) } : f
-                    ));
-                    if (selectedNoteId === noteId) setSelectedNoteId(null);
-                }
+            const renameFolder = (folderId, newName) => {
+                setData(prev => ({
+                    ...prev,
+                    folders: prev.folders.map(f => f.id === folderId ? { ...f, name: newName } : f)
+                }));
+            };
+
+            const toggleFolder = (folderId) => {
+                setData(prev => ({
+                    ...prev,
+                    folders: prev.folders.map(f => f.id === folderId ? { ...f, isOpen: !f.isOpen } : f)
+                }));
             };
 
             return (
-                <div className="flex h-screen overflow-hidden bg-white">
+                <div className="flex h-screen w-full">
                     {/* Sidebar */}
-                    <aside className="w-72 bg-[#f9f9f9] border-r border-gray-200 flex flex-col">
-                        <div className="p-4 flex items-center justify-between border-b border-gray-100">
-                            <h1 className="font-bold text-lg text-gray-700">KeepMore</h1>
-                            <button className="w-8 h-8 rounded-full hover:bg-gray-200 flex items-center justify-center text-blue-600" title="Google Account">
-                                <i className="bi bi-google"></i>
+                    <aside className="sidebar w-64 flex flex-col shrink-0">
+                        <div className="p-5 flex items-center justify-between">
+                            <h1 className="font-bold text-lg tracking-tight">KeepMore</h1>
+                            <button onClick={addFolder} className="text-gray-400 hover:text-black transition-colors">
+                                <i className="bi bi-folder-plus text-xl"></i>
                             </button>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto py-2">
-                            <div className="px-3 mb-2 flex items-center justify-between group">
-                                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Folders</span>
-                                <button onClick={addFolder} className="text-gray-400 hover:text-gray-600">
-                                    <i className="bi bi-plus-lg"></i>
-                                </button>
-                            </div>
-
-                            {folders.map(folder => (
-                                <div key={folder.id} className="mb-1">
-                                    <div 
+                        <div className="flex-1 overflow-y-auto px-2">
+                            {data.folders.map(folder => (
+                                <div key={folder.id} className="mb-4">
+                                    <div
+                                        className="flex items-center px-4 py-1 text-xs font-bold text-gray-400 uppercase tracking-widest cursor-pointer group hover:text-gray-600"
                                         onClick={() => toggleFolder(folder.id)}
-                                        className={`flex items-center px-4 py-2 cursor-pointer hover:bg-gray-200 group sidebar-item ${selectedFolderId === folder.id ? 'bg-gray-200 shadow-sm' : ''}`}
                                     >
-                                        <i className={`bi ${folder.isOpen ? 'bi-chevron-down' : 'bi-chevron-right'} text-xs mr-3 text-gray-400`}></i>
-                                        <i className="bi bi-folder2 text-blue-500 mr-2"></i>
-                                        <span className="flex-1 text-sm font-medium truncate">{folder.name}</span>
-                                        <div className="action-btn flex items-center space-x-2">
-                                            <i onClick={(e) => { e.stopPropagation(); addNote(folder.id); }} className="bi bi-file-earmark-plus text-gray-400 hover:text-blue-500"></i>
-                                            <i onClick={(e) => deleteFolder(e, folder.id)} className="bi bi-trash text-gray-400 hover:text-red-500"></i>
-                                        </div>
+                                        <i className={`bi ${folder.isOpen ? 'bi-caret-down-fill' : 'bi-caret-right-fill'} mr-2 text-[8px]`}></i>
+                                        {editingId === folder.id ? (
+                                            <input
+                                                autoFocus
+                                                autoSelect
+                                                className="bg-transparent border-none outline-none text-black w-full"
+                                                value={folder.name}
+                                                onChange={(e) => renameFolder(folder.id, e.target.value)}
+                                                onBlur={() => setEditingId(null)}
+                                                onKeyDown={(e) => e.key === 'Enter' && setEditingId(null)}
+                                            />
+                                        ) : (
+                                            <span className="flex-1 truncate" onDoubleClick={() => setEditingId(folder.id)}>{folder.name}</span>
+                                        )}
+                                        <i onClick={(e) => { e.stopPropagation(); addNote(folder.id); }} className="bi bi-plus-lg opacity-0 group-hover:opacity-100 hover:text-black ml-2"></i>
                                     </div>
 
                                     {folder.isOpen && (
-                                        <div className="ml-6 border-l border-gray-200 folder-transition">
+                                        <div className="mt-1">
                                             {folder.notes.map(note => (
-                                                <div 
+                                                <div
                                                     key={note.id}
-                                                    onClick={() => { setSelectedFolderId(folder.id); setSelectedNoteId(note.id); }}
-                                                    className={`flex items-center px-4 py-2 cursor-pointer group sidebar-item hover:bg-gray-100 ${selectedNoteId === note.id ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-600'}`}
+                                                    onClick={() => setData(prev => ({ ...prev, activeNoteId: note.id }))}
+                                                    className={`sidebar-item flex items-center px-4 py-2 text-sm cursor-pointer group ${data.activeNoteId === note.id ? 'active' : 'text-gray-600'}`}
                                                 >
-                                                    <i className="bi bi-file-text mr-2 text-xs"></i>
-                                                    <span className="flex-1 text-sm truncate">{note.title || '제목 없음'}</span>
-                                                    <i onClick={(e) => deleteNote(e, folder.id, note.id)} className="bi bi-x action-btn hover:text-red-500 text-lg"></i>
+                                                    <i className="bi bi-sticky mr-3 text-gray-400"></i>
+                                                    {editingId === note.id ? (
+                                                        <input
+                                                            autoFocus
+                                                            className="bg-transparent border-none outline-none text-black w-full"
+                                                            value={note.title}
+                                                            onChange={(e) => updateNote(note.id, folder.id, 'title', e.target.value)}
+                                                            onBlur={() => setEditingId(null)}
+                                                            onKeyDown={(e) => e.key === 'Enter' && setEditingId(null)}
+                                                        />
+                                                    ) : (
+                                                        <span className="flex-1 truncate" onDoubleClick={() => setEditingId(note.id)}>
+                                                            {note.title || 'Untitled'}
+                                                        </span>
+                                                    )}
+                                                    <i onClick={(e) => deleteNote(e, note.id, folder.id)} className="bi bi-trash3 opacity-0 group-hover:opacity-100 hover:text-red-500 text-xs ml-2"></i>
                                                 </div>
                                             ))}
-                                            {folder.notes.length === 0 && (
-                                                <div className="text-xs text-gray-400 px-4 py-2 italic">메모가 없습니다</div>
-                                            )}
                                         </div>
                                     )}
                                 </div>
                             ))}
                         </div>
+
+                        <div className="sidebar-footer space-y-2">
+                            <button className="flex items-center w-full px-4 py-2 text-sm text-gray-500 hover:text-black transition-colors rounded-lg hover:bg-gray-100">
+                                <i className="bi bi-shield-check mr-3"></i>
+                                <span className="text-xs font-semibold">Meritz Sync Protected</span>
+                            </button>
+                            <button className="flex items-center w-full px-4 py-2 text-sm text-gray-500 hover:text-black transition-colors rounded-lg hover:bg-gray-100">
+                                <i className="bi bi-palette mr-3"></i>
+                                <span className="text-xs">Theme Settings</span>
+                            </button>
+                        </div>
                     </aside>
 
-                    {/* Main Content */}
-                    <main className="flex-1 flex flex-col bg-white">
-                        {currentNote ? (
+                    {/* Editor Main */}
+                    <main className="flex-1 bg-white relative overflow-hidden flex flex-col">
+                        {activeNote ? (
                             <React.Fragment>
-                                {/* Toolbar Area */}
-                                <div className="px-6 py-2 border-b border-gray-100 flex items-center space-x-4 sticky top-0 bg-white z-10">
-                                    <Toolbar />
+                                <div className="flex-1 overflow-y-auto">
+                                    <div className="editor-container">
+                                        <input
+                                            className="note-title-input"
+                                            placeholder="Untitled"
+                                            value={activeNote.title}
+                                            onChange={(e) => updateNote(activeNote.id, activeNote.folderId, 'title', e.target.value)}
+                                        />
+                                        <Editor
+                                            content={activeNote.content}
+                                            onUpdate={(val) => updateNote(activeNote.id, activeNote.folderId, 'content', val)}
+                                        />
+                                    </div>
                                 </div>
-
-                                {/* Editor Area */}
-                                <div className="flex-1 overflow-y-auto p-12 max-w-4xl mx-auto w-full">
-                                    <input 
-                                        className="w-full text-4xl font-bold mb-8 outline-none placeholder-gray-300 border-none"
-                                        placeholder="Note Title"
-                                        value={currentNote.title}
-                                        onChange={(e) => handleUpdateNote(currentNote.id, 'title', e.target.value)}
-                                    />
-                                    <Editor 
-                                        content={currentNote.content}
-                                        onUpdate={(val) => handleUpdateNote(currentNote.id, 'content', val)}
-                                    />
-                                </div>
+                                <FloatingToolbar />
                             </React.Fragment>
                         ) : (
-                            <div className="flex-1 flex items-center justify-center text-gray-400 flex-col bg-gray-50">
-                                <i className="bi bi-journal-text text-6xl mb-4 opacity-20"></i>
-                                <p className="text-lg">메모를 선택하거나 새로 작성해 주세요</p>
+                            <div className="flex-1 flex items-center justify-center text-gray-200">
+                                <div className="text-center">
+                                    <i className="bi bi-journal-text text-8xl mb-4 block opacity-10"></i>
+                                    <p className="text-gray-400 font-medium">Select or create a note</p>
+                                </div>
                             </div>
                         )}
                     </main>
@@ -194,46 +369,58 @@
             );
         };
 
-        const Toolbar = () => {
-            const format = (cmd, val) => {
+        const FloatingToolbar = () => {
+            const execCmd = (cmd, val = null) => {
                 document.execCommand(cmd, false, val);
             };
 
-            const btnClass = "w-9 h-9 flex items-center justify-center rounded-lg hover:bg-gray-200 text-gray-600 transition-colors";
+            const insertLink = () => {
+                const url = prompt('Enter URL:');
+                if (url) execCmd('createLink', url);
+            };
+
+            const insertImage = () => {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'image/*';
+                input.onchange = (e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (re) => {
+                            execCmd('insertImage', re.target.result);
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                };
+                input.click();
+            };
 
             return (
-                <div className="flex items-center space-x-1 p-1 bg-gray-100 rounded-xl">
-                    <button className={btnClass} onClick={() => format('bold')} title="Bold"><i className="bi bi-type-bold"></i></button>
-                    <button className={btnClass} onClick={() => format('italic')} title="Italic"><i className="bi bi-type-italic"></i></button>
-                    <button className={btnClass} onClick={() => format('underline')} title="Underline"><i className="bi bi-type-underline"></i></button>
-                    <div className="w-px h-5 bg-gray-300 mx-2"></div>
-                    <button className={btnClass} onClick={() => format('insertUnorderedList')} title="Bullet List"><i className="bi bi-list-ul"></i></button>
+                <div className="toolbar-wrapper">
+                    <button className="toolbar-btn" onClick={() => execCmd('bold')} title="Bold"><i className="bi bi-type-bold"></i></button>
+                    <button className="toolbar-btn" onClick={() => execCmd('italic')} title="Italic"><i className="bi bi-type-italic"></i></button>
+                    <button className="toolbar-btn" onClick={() => execCmd('underline')} title="Underline"><i className="bi bi-type-underline"></i></button>
+                    <button className="toolbar-btn" onClick={() => execCmd('strikeThrough')} title="Strikethrough"><i className="bi bi-type-strikethrough"></i></button>
+                    <div className="toolbar-divider"></div>
+                    <button className="toolbar-btn" onClick={() => execCmd('insertUnorderedList')} title="List"><i className="bi bi-list-ul"></i></button>
+                    <button className="toolbar-btn" onClick={() => execCmd('insertOrderedList')} title="Numbers"><i className="bi bi-list-ol"></i></button>
+                    <div className="toolbar-divider"></div>
+                    <button className="toolbar-btn" onClick={insertLink} title="Link"><i className="bi bi-link-45deg"></i></button>
+                    <button className="toolbar-btn" onClick={insertImage} title="Image"><i className="bi bi-image"></i></button>
+                    <button className="toolbar-btn" onClick={() => execCmd('removeFormat')} title="Clear"><i className="bi bi-eraser"></i></button>
                 </div>
             );
         };
 
         const Editor = ({ content, onUpdate }) => {
             const editorRef = useRef(null);
-            const isFirstRender = useRef(true);
 
             useEffect(() => {
-                if (editorRef.current && isFirstRender.current) {
+                if (editorRef.current && editorRef.current.innerHTML !== content) {
                     editorRef.current.innerHTML = content;
-                    isFirstRender.current = false;
-                }
-            }, []);
-
-            useEffect(() => {
-                if (editorRef.current && !isFirstRender.current) {
-                    if (editorRef.current.innerHTML !== content) {
-                        editorRef.current.innerHTML = content;
-                    }
                 }
             }, [content]);
-
-            const handleChange = () => {
-                onUpdate(editorRef.current.innerHTML);
-            };
 
             const handlePaste = (e) => {
                 const items = (e.clipboardData || e.originalEvent.clipboardData).items;
@@ -245,17 +432,12 @@
                         reader.onload = (event) => {
                             const img = document.createElement('img');
                             img.src = event.target.result;
-                            
                             const selection = window.getSelection();
                             if (selection.rangeCount > 0) {
                                 const range = selection.getRangeAt(0);
                                 range.deleteContents();
                                 range.insertNode(img);
-                                range.collapse(false);
-                            } else {
-                                editorRef.current.appendChild(img);
                             }
-                            handleChange();
                         };
                         reader.readAsDataURL(blob);
                         e.preventDefault();
@@ -264,13 +446,13 @@
             };
 
             return (
-                <div 
+                <div
                     ref={editorRef}
                     contentEditable
-                    onInput={handleChange}
+                    onInput={(e) => onUpdate(e.currentTarget.innerHTML)}
                     onPaste={handlePaste}
-                    className="editor-content w-full text-lg leading-relaxed text-gray-700 min-h-[500px]"
-                    placeholder="메모를 입력하세요..."
+                    className="editor-content"
+                    placeholder="Write something brilliant..."
                 ></div>
             );
         };
@@ -279,4 +461,5 @@
         root.render(<App />);
     </script>
 </body>
+
 </html>
