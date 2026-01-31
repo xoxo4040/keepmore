@@ -6,37 +6,51 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KeepMore - My Notes</title>
     <link rel="icon" type="image/png" href="sticky-note.png">
+
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+
     <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
     <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+
+    <!-- Firebase SDK (Compat Version for easy CDN usage) -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
     <style>
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             background-color: #ffffff;
-            color: #1a1a1a;
+            color: #1a1a1e;
+            -webkit-font-smoothing: antialiased;
         }
 
         .sidebar {
-            background-color: #f7f7f7;
-            border-right: 1px solid #ededed;
-            transition: width 0.3s ease;
+            background-color: #fcfcfd;
+            border-right: 1px solid #f0f0f3;
+            transition: all 0.3s ease;
         }
 
         .sidebar-item {
-            border-radius: 6px;
-            margin: 2px 8px;
-            transition: all 0.2s;
+            border-radius: 10px;
+            margin: 2px 10px;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            color: #64748b;
         }
 
         .sidebar-item:hover {
-            background-color: #efefef;
+            background-color: #f1f5f9;
+            color: #1e293b;
         }
 
         .sidebar-item.active {
-            background-color: #e8e8e8;
+            background-color: #f1f5f9;
+            color: #6366f1;
             font-weight: 600;
         }
 
@@ -75,28 +89,29 @@
             display: list-item !important;
         }
 
-        /* Floating Toolbar Style like My Notes */
+        /* Floating Toolbar Style */
         .toolbar-wrapper {
             position: fixed;
-            bottom: 30px;
+            bottom: 40px;
             left: 50%;
             transform: translateX(-50%);
             display: flex;
             align-items: center;
-            background: rgba(255, 255, 255, 0.9);
-            backdrop-filter: blur(10px);
-            padding: 6px 12px;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08), 0 0 1px rgba(0, 0, 0, 0.1);
-            border: 1px solid rgba(0, 0, 0, 0.05);
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px) saturate(180%);
+            padding: 8px 16px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.1), 0 0 1px rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
             z-index: 1000;
-            opacity: 0.3;
-            transition: opacity 0.3s, transform 0.3s;
+            opacity: 0.15;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .toolbar-wrapper:hover {
             opacity: 1;
-            transform: translateX(-50%) translateY(-5px);
+            transform: translateX(-50%) translateY(-8px);
+            background: rgba(255, 255, 255, 0.95);
         }
 
         .toolbar-btn {
@@ -138,18 +153,12 @@
             color: #eee;
         }
 
-        /* Settings/Actions in sidebar bottom */
-        .sidebar-footer {
-            border-top: 1px solid #ededed;
-            padding: 12px;
-        }
-
-        /* Responsive hiding of sidebar */
-        @media (max-width: 768px) {
-            .sidebar {
-                width: 0;
-                overflow: hidden;
-            }
+        /* Styles for Auth Page */
+        .auth-card {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
         }
 
         /* Base64 Images & Resizing */
@@ -173,12 +182,10 @@
             outline: none;
         }
 
-        /* Selection highlight */
         ::selection {
             background: #e3f2fd;
         }
 
-        /* Placeholders for contenteditable */
         [contenteditable]:empty:before {
             content: attr(placeholder);
             color: #ccc;
@@ -196,30 +203,95 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <script type="text/babel">
+        // Firebase Config
+        const firebaseConfig = {
+            apiKey: "AIzaSyDMv05OTudoY1jKp4P5ox2WJZAE2Xf1OZA",
+            authDomain: "keepmore-6901d.firebaseapp.com",
+            projectId: "keepmore-6901d",
+            storageBucket: "keepmore-6901d.firebasestorage.app",
+            messagingSenderId: "284957730449",
+            appId: "1:284957730449:web:2e8059b4605a7d0c5f4130",
+            measurementId: "G-46CPXR3CXR"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+
         const { useState, useEffect, useRef, useCallback, useMemo } = React;
 
         const App = () => {
-            const [data, setData] = useState(() => {
-                const saved = localStorage.getItem('keepmore-v2');
-                return saved ? JSON.parse(saved) : {
-                    folders: [
-                        {
-                            id: 'f1', name: 'Notes', isOpen: true, notes: [
-                                { id: 'n1', title: 'Welcome', content: '<div>Start writing here...</div>' }
-                            ]
-                        }
-                    ],
-                    activeNoteId: 'n1'
-                };
+            const [user, setUser] = useState(null);
+            const [loading, setLoading] = useState(true);
+            const [data, setData] = useState({
+                folders: [
+                    {
+                        id: 'f1', name: 'Notes', isOpen: true, notes: [
+                            { id: 'n1', title: 'Welcome', content: '<div>Start writing here...</div>' }
+                        ]
+                    }
+                ],
+                activeNoteId: 'n1'
             });
 
             const [editingId, setEditingId] = useState(null);
             const editorRef = useRef(null);
 
-            // Sync to LocalStorage
+            // Auth State Listener
             useEffect(() => {
-                localStorage.setItem('keepmore-v2', JSON.stringify(data));
-            }, [data]);
+                const unsubscribe = auth.onAuthStateChanged((u) => {
+                    setUser(u);
+                    if (u) {
+                        loadUserData(u.uid);
+                    } else {
+                        setLoading(false);
+                    }
+                });
+                return () => unsubscribe();
+            }, []);
+
+            // Sync to Firestore (Debounced)
+            const syncTimeout = useRef(null);
+            useEffect(() => {
+                if (user && !loading) {
+                    if (syncTimeout.current) clearTimeout(syncTimeout.current);
+                    syncTimeout.current = setTimeout(() => {
+                        db.collection('users').doc(user.uid).set(data);
+                    }, 500);
+                }
+            }, [data, user, loading]);
+
+            const loadUserData = async (uid) => {
+                try {
+                    const doc = await db.collection('users').doc(uid).get();
+                    if (doc.exists) {
+                        setData(doc.data());
+                    } else {
+                        // Initial data for new user
+                        await db.collection('users').doc(uid).set(data);
+                    }
+                } catch (e) {
+                    console.error("Error loading data:", e);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const handleGoogleLogin = async () => {
+                const provider = new firebase.auth.GoogleAuthProvider();
+                try {
+                    await auth.signInWithPopup(provider);
+                } catch (e) {
+                    alert(e.message);
+                }
+            };
+
+            const handleLogout = () => {
+                if (confirm('로그아웃 하시겠습니까?')) {
+                    auth.signOut();
+                }
+            };
 
             const activeNote = useMemo(() => {
                 for (const folder of data.folders) {
@@ -261,7 +333,7 @@
 
             const deleteNote = (e, noteId, folderId) => {
                 e.stopPropagation();
-                if (!confirm('Delete this note?')) return;
+                if (!confirm('메모를 삭제하시겠습니까?')) return;
                 setData(prev => {
                     const nextFolders = prev.folders.map(f => f.id === folderId ? {
                         ...f, notes: f.notes.filter(n => n.id !== noteId)
@@ -270,6 +342,21 @@
                     if (nextActive === noteId) {
                         const allNotes = nextFolders.flatMap(f => f.notes);
                         nextActive = allNotes.length > 0 ? allNotes[0].id : null;
+                    }
+                    return { ...prev, folders: nextFolders, activeNoteId: nextActive };
+                });
+            };
+
+            const deleteFolder = (e, folderId) => {
+                e.stopPropagation();
+                if (!confirm('폴더와 내부의 모든 메모를 삭제하시겠습니까?')) return;
+                setData(prev => {
+                    const nextFolders = prev.folders.filter(f => f.id !== folderId);
+                    let nextActive = prev.activeNoteId;
+                    const wasInDeleted = prev.folders.find(f => f.id === folderId)?.notes.some(n => n.id === prev.activeNoteId);
+                    if (wasInDeleted) {
+                        const allRemainingNotes = nextFolders.flatMap(f => f.notes);
+                        nextActive = allRemainingNotes.length > 0 ? allRemainingNotes[0].id : null;
                     }
                     return { ...prev, folders: nextFolders, activeNoteId: nextActive };
                 });
@@ -289,18 +376,65 @@
                 }));
             };
 
+            if (loading) {
+                return (
+                    <div className="h-screen w-full flex items-center justify-center bg-slate-50">
+                        <div className="flex flex-col items-center">
+                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
+                            <p className="text-slate-500 font-medium tracking-tight">Loading KeepMore...</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (!user) {
+                return (
+                    <div className="h-screen w-full flex items-center justify-center bg-[#f8fafc] overflow-hidden relative">
+                        {/* Background Decor */}
+                        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-100 rounded-full blur-[120px] opacity-60"></div>
+                        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-100 rounded-full blur-[120px] opacity-60"></div>
+
+                        <div className="auth-card p-10 rounded-[32px] w-full max-w-md text-center z-10">
+                            <div className="mb-8">
+                                <div className="w-20 h-20 bg-indigo-50 rounded-[24px] flex items-center justify-center mx-auto mb-6 shadow-sm">
+                                    <img src="https://api.iconify.design/fluent-emoji:cat-face.svg" className="w-12 h-12" alt="Logo" />
+                                </div>
+                                <h1 className="text-3xl font-bold text-slate-900 mb-2 tracking-tight">KeepMore</h1>
+                                <p className="text-slate-500 font-medium">나만의 프리미엄 메모 공간</p>
+                            </div>
+
+                            <button
+                                onClick={handleGoogleLogin}
+                                className="w-full bg-white border border-slate-200 py-3.5 px-6 rounded-2xl flex items-center justify-center space-x-3 hover:bg-slate-50 hover:border-slate-300 transition-all duration-300 shadow-sm active:scale-[0.98]"
+                            >
+                                <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" className="w-5 h-5" alt="Google" />
+                                <span className="text-slate-700 font-semibold">Google 계정으로 시작하기</span>
+                            </button>
+
+                            <p className="mt-8 text-xs text-slate-400">시작하면 서비스 약관 및 개인정보 정책에 동의하게 됩니다.</p>
+                        </div>
+                    </div>
+                );
+            }
+
             return (
                 <div className="flex h-screen w-full">
                     {/* Sidebar */}
                     <aside className="sidebar w-64 flex flex-col shrink-0">
                         <div className="p-5 flex items-center justify-between">
-                            <h1 className="font-bold text-lg tracking-tight">KeepMore</h1>
-                            <div className="flex items-center space-x-3">
-                                <button title="Google Drive Sync" className="text-gray-400 hover:text-green-600 transition-colors">
-                                    <i className="bi bi-google-play text-sm"></i>
-                                </button>
-                                <button onClick={addFolder} className="text-gray-400 hover:text-black transition-colors">
-                                    <i className="bi bi-folder-plus text-xl"></i>
+                            <div className="flex items-center space-x-2">
+                                <div
+                                    onClick={handleLogout}
+                                    className="w-9 h-9 rounded-xl overflow-hidden cursor-pointer transition-all duration-500 shadow-sm border-2 grayscale-0 opacity-100 border-indigo-100 flex items-center justify-center bg-white"
+                                    title="로그아웃"
+                                >
+                                    <img src="https://api.iconify.design/fluent-emoji:cat-face.svg" className="w-7 h-7" alt="Cute Cat" />
+                                </div>
+                                <h1 className="font-bold text-lg tracking-tight text-slate-800">KeepMore</h1>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                                <button onClick={addFolder} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all" title="새 폴더">
+                                    <i className="bi bi-folder-plus text-lg"></i>
                                 </button>
                             </div>
                         </div>
@@ -309,7 +443,7 @@
                             {data.folders.map(folder => (
                                 <div key={folder.id} className="mb-4">
                                     <div
-                                        className="flex items-center px-4 py-1 text-xs font-bold text-gray-400 uppercase tracking-widest cursor-pointer group hover:text-gray-600"
+                                        className="flex items-center px-4 py-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-widest cursor-pointer group hover:text-slate-600"
                                         onClick={() => toggleFolder(folder.id)}
                                     >
                                         <i className={`bi ${folder.isOpen ? 'bi-caret-down-fill' : 'bi-caret-right-fill'} mr-2 text-[8px]`}></i>
@@ -326,7 +460,10 @@
                                         ) : (
                                             <span className="flex-1 truncate" onDoubleClick={() => setEditingId(folder.id)}>{folder.name}</span>
                                         )}
-                                        <i onClick={(e) => { e.stopPropagation(); addNote(folder.id); }} className="bi bi-plus-lg opacity-0 group-hover:opacity-100 hover:text-black ml-2"></i>
+                                        <div className="opacity-0 group-hover:opacity-100 flex items-center space-x-2 ml-2">
+                                            <i onClick={(e) => { e.stopPropagation(); addNote(folder.id); }} className="bi bi-plus-lg hover:text-black" title="새 메모"></i>
+                                            <i onClick={(e) => deleteFolder(e, folder.id)} className="bi bi-trash3 hover:text-red-500 text-[10px]" title="폴더 삭제"></i>
+                                        </div>
                                     </div>
 
                                     {folder.isOpen && (
@@ -361,8 +498,16 @@
                             ))}
                         </div>
 
-                        <div className="sidebar-footer">
-                            {/* Footer content removed per user request */}
+                        <div className="p-4 border-t border-slate-100">
+                            <div className="flex items-center space-x-3 px-2">
+                                <div className="w-8 h-8 rounded-full bg-indigo-50 flex items-center justify-center overflow-hidden">
+                                    <img src={user.photoURL} alt="User" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-semibold text-slate-700 truncate">{user.displayName}</p>
+                                    <p className="text-[10px] text-slate-400 truncate">{user.email}</p>
+                                </div>
+                            </div>
                         </div>
                     </aside>
 
@@ -408,6 +553,16 @@
                 }
             };
 
+            const clearAll = () => {
+                if (confirm('내용을 모두 삭제하시겠습니까?')) {
+                    if (editorRef.current) {
+                        editorRef.current.innerHTML = '<div></div>';
+                        const event = new Event('input', { bubbles: true });
+                        editorRef.current.dispatchEvent(event);
+                    }
+                }
+            };
+
             const insertLink = () => {
                 const url = prompt('Enter URL:');
                 if (url) execCmd('createLink', url);
@@ -442,7 +597,7 @@
                     <div className="toolbar-divider"></div>
                     <button className="toolbar-btn" onClick={insertLink} title="Link"><i className="bi bi-link-45deg"></i></button>
                     <button className="toolbar-btn" onClick={insertImage} title="Image"><i className="bi bi-image"></i></button>
-                    <button className="toolbar-btn" onClick={() => execCmd('removeFormat')} title="Clear"><i className="bi bi-eraser"></i></button>
+                    <button className="toolbar-btn text-red-400 hover:text-red-600" onClick={clearAll} title="내용 전체 삭제"><i className="bi bi-eraser-fill"></i></button>
                 </div>
             );
         };
@@ -464,7 +619,6 @@
 
             const handleMouseDown = (e) => {
                 if (e.target.tagName === 'IMG') {
-                    // Start Resizing
                     resizingImg.current = e.target;
                     startX.current = e.clientX;
                     startWidth.current = e.target.offsetWidth;
@@ -487,9 +641,8 @@
                     document.addEventListener('mousemove', onMouseMove);
                     document.addEventListener('mouseup', onMouseUp);
 
-                    e.preventDefault(); // Stop default ghost drag
+                    e.preventDefault();
                 } else {
-                    // Deselect images
                     const imgs = editorRef.current.querySelectorAll('img');
                     imgs.forEach(img => img.classList.remove('selected'));
                 }
@@ -505,14 +658,13 @@
                         reader.onload = (event) => {
                             const img = document.createElement('img');
                             img.src = event.target.result;
-                            img.style.width = '300px'; // Default size
+                            img.style.width = '300px';
 
                             const selection = window.getSelection();
                             if (selection.rangeCount > 0) {
                                 const range = selection.getRangeAt(0);
                                 range.deleteContents();
                                 range.insertNode(img);
-                                // Insert a zero-width space after image to allow cursor positioning/deletion
                                 const spacer = document.createTextNode('\u200B');
                                 range.setStartAfter(img);
                                 range.insertNode(spacer);
