@@ -2,12 +2,7 @@
 // using global firebase object from compat CDN
 
 const firebaseConfig = {
-    apiKey: "AIzaSyBNP9QIFPaZtIrpmLIw26MUP5z5gMfTKHo",
-    authDomain: "keep-more.firebaseapp.com",
-    projectId: "keep-more",
-    storageBucket: "keep-more.firebasestorage.app",
-    messagingSenderId: "572233684534",
-    appId: "1:572233684534:web:3d8e7bfbf7831adc6f8bef"
+    import.meta.env.VITE_FIREBASE_API_KEY 같은 코드로 바꾸세요.
 };
 
 // Initialize Firebase
